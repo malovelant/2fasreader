@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>2FAS Backup Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #fff;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header { 
+            background: #242424;
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 30px;
+        }
+        h1 { font-size: 2.5rem; margin-bottom: 10px; }
+        .subtitle { color: #999; margin-bottom: 30px; }
+        .upload-area {
+            background: #2a2a2a;
+            border: 3px dashed #ef3e3e;
+            border-radius: 12px;
+            padding: 40px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .upload-area:hover { background: #333; }
+        .upload-icon { font-size: 3rem; margin-bottom: 15px; }
+        input[type="file"] { display: none; }
+        .message {
+            padding: 15px 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+            display: none;
+        }
+        .message.show { display: block; }
+        .message.info { background: #1e3a5f; color: #6cb4ff; }
+        .message.error { background: #3d1a1a; color: #ff6b6b; }
+        .message.success { background: #1a3d1a; color: #6bff6b; }
+        
+        .modal-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-overlay.show { display: flex; }
+        .modal {
+            background: #242424;
+            border-radius: 16px;
+            padding: 35px;
+            max-width: 450px;
+            width: 90%;
+        }
+        .modal-title { font-size: 1.5rem; margin-bottom: 15px; }
+        .modal-description { color: #999; margin-bottom: 25px; }
+        .password-group { position: relative; margin-bottom: 25px; }
+        .password-input {
+            width: 100%;
+            padding: 14px 45px 14px 16px;
+            border: 2px solid #3a3a3a;
+            border-radius: 10px;
+            background: #2a2a2a;
+            color: #fff;
+            font-size: 1rem;
+        }
+        .password-input:focus {
+            outline: none;
+            border-color: #ef3e3e;
+        }
+        .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #666;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+        }
+        .password-toggle:hover { color: #ef3e3e; }
+        .password-toggle svg {
+            width: 20px;
+            height: 20px;
+            stroke: currentColor;
+            fill: none;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+        .modal-buttons { display: flex; gap: 12px; }
+        .btn {
+            flex: 1;
+            padding: 14px 24px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+        }
+        .btn-primary { background: #ef3e3e; color: white; }
+        .btn-primary:hover { background: #ff4d4d; }
+        .btn-secondary { background: #3a3a3a; color: #ccc; }
+        
+        .stats { display: flex; gap: 20px; margin-top: 20px; }
+        .stat-box {
+            flex: 1;
+            background: #ef3e3e;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+        .stat-number { font-size: 2rem; font-weight: bold; }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 25px;
+        }
+        .card {
+            background: #242424;
+            border-radius: 16px;
+            padding: 25px;
+            transition: transform 0.3s;
+        }
+        .card:hover { transform: translateY(-5px); }
+        .card-name { font-size: 1.3rem; font-weight: 600; margin-bottom: 15px; }
+        .qr-container {
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: center;
+            margin-bottom: 15px;
+        }
+        .details { background: #2a2a2a; border-radius: 8px; padding: 15px; }
+        .detail-row { display: flex; margin-bottom: 10px; font-size: 0.9rem; }
+        .detail-row:last-child { margin-bottom: 0; }
+        .detail-label { font-weight: 600; color: #999; min-width: 80px; }
+        .detail-value { color: #ccc; word-break: break-all; font-family: monospace; }
+        
+        .footer { text-align: center; color: #666; margin-top: 40px; font-size: 0.9rem; }
+        .footer a { color: #ef3e3e; }
+        
+        @media (max-width: 768px) {
+            .grid { grid-template-columns: 1fr; }
+            h1 { font-size: 2rem; }
+            .header { padding: 25px; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔐 2FAS Backup Viewer</h1>
+            <p class="subtitle">View QR codes from your 2FAS backup files</p>
+            
+            <div class="upload-area" id="uploadArea">
+                <div class="upload-icon">📁</div>
+                <div>Click or drag & drop your .2fas backup file</div>
+                <input type="file" id="fileInput" accept=".2fas">
+            </div>
+
+            <div class="message" id="message"></div>
+            <div class="stats" id="stats" style="display:none">
+                <div class="stat-box">
+                    <div class="stat-number" id="totalCount">0</div>
+                    <div>Total Accounts</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid" id="grid"></div>
+
+        <div class="footer">
+            <p>Runs entirely in your browser • No data sent to any server</p>
+            <p>Not affiliated with 2FAS • <a href="https://github.com/alexieong/2fas-backup-viewer" target="_blank">View Source</a></p>
+        </div>
+    </div>
+
+    <div class="modal-overlay" id="passwordModal">
+        <div class="modal">
+            <h2 class="modal-title">🔒 Encrypted Backup</h2>
+            <p class="modal-description">Enter your password to decrypt</p>
+            <div class="password-group">
+                <input type="password" class="password-input" id="passwordInput" placeholder="Password" autocomplete="off">
+                <button class="password-toggle" id="passwordToggle" type="button">
+                    <svg id="eyeIcon" viewBox="0 0 24 24">
+                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                        <circle cx="12" cy="12" r="3"></circle>
+                    </svg>
+                    <svg id="eyeOffIcon" viewBox="0 0 24 24" style="display:none">
+                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path>
+                        <line x1="1" y1="1" x2="23" y2="23"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="modal-buttons">
+                <button class="btn btn-secondary" id="cancelBtn">Cancel</button>
+                <button class="btn btn-primary" id="decryptBtn">Decrypt</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const $ = id => document.getElementById(id);
+        const uploadArea = $('uploadArea');
+        const fileInput = $('fileInput');
+        const message = $('message');
+        const grid = $('grid');
+        const stats = $('stats');
+        const totalCount = $('totalCount');
+        const passwordModal = $('passwordModal');
+        const passwordInput = $('passwordInput');
+        const passwordToggle = $('passwordToggle');
+        
+        let currentData = null;
+
+        function showMsg(text, type) {
+            message.textContent = text;
+            message.className = `message show ${type}`;
+        }
+
+        function showModal() {
+            passwordModal.classList.add('show');
+            passwordInput.value = '';
+            passwordInput.type = 'password';
+            $('eyeIcon').style.display = 'block';
+            $('eyeOffIcon').style.display = 'none';
+            setTimeout(() => passwordInput.focus(), 100);
+        }
+
+        function hideModal() {
+            passwordModal.classList.remove('show');
+        }
+
+        uploadArea.onclick = () => fileInput.click();
+        
+        uploadArea.ondragover = e => {
+            e.preventDefault();
+            uploadArea.style.background = '#3a2020';
+        };
+        
+        uploadArea.ondragleave = () => uploadArea.style.background = '#2a2a2a';
+        
+        uploadArea.ondrop = e => {
+            e.preventDefault();
+            uploadArea.style.background = '#2a2a2a';
+            if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+        };
+
+        fileInput.onchange = e => {
+            if (e.target.files.length) handleFile(e.target.files[0]);
+        };
+
+        passwordToggle.onclick = () => {
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                $('eyeIcon').style.display = 'none';
+                $('eyeOffIcon').style.display = 'block';
+            } else {
+                passwordInput.type = 'password';
+                $('eyeIcon').style.display = 'block';
+                $('eyeOffIcon').style.display = 'none';
+            }
+        };
+
+        $('cancelBtn').onclick = () => {
+            hideModal();
+            showMsg('Cancelled', 'info');
+        };
+
+        $('decryptBtn').onclick = async () => {
+            const pass = passwordInput.value;
+            if (!pass) return showMsg('Enter password', 'error');
+            
+            hideModal();
+            showMsg('Decrypting...', 'info');
+            
+            try {
+                const decrypted = await decrypt(currentData, pass);
+                const services = JSON.parse(decrypted);
+                display(services);
+            } catch (err) {
+                showMsg('Wrong password or corrupted file', 'error');
+            }
+        };
+
+        passwordInput.onkeypress = e => {
+            if (e.key === 'Enter') $('decryptBtn').click();
+        };
+
+        passwordModal.onclick = e => {
+            if (e.target === passwordModal) {
+                hideModal();
+                showMsg('Cancelled', 'info');
+            }
+        };
+
+        function base64ToBytes(b64) {
+            return Uint8Array.from(atob(b64), m => m.codePointAt(0));
+        }
+
+        async function decrypt(encrypted, password) {
+            const [data, salt, iv] = encrypted.split(":");
+            const key = await crypto.subtle.deriveKey(
+                { name: "PBKDF2", hash: "SHA-256", salt: base64ToBytes(salt), iterations: 10000 },
+                await crypto.subtle.importKey("raw", new TextEncoder().encode(password), "PBKDF2", false, ["deriveKey"]),
+                { name: "AES-GCM", length: 256 },
+                true,
+                ["decrypt"]
+            );
+            
+            return new TextDecoder().decode(
+                await crypto.subtle.decrypt(
+                    { name: "AES-GCM", iv: base64ToBytes(iv), tagLength: 128 },
+                    key,
+                    base64ToBytes(data)
+                )
+            );
+        }
+
+        function display(services) {
+            services.sort((a, b) => a.name.localeCompare(b.name));
+            
+            grid.innerHTML = '';
+            totalCount.textContent = services.length;
+            stats.style.display = 'flex';
+
+            services.forEach((s, i) => {
+                const card = document.createElement('div');
+                card.className = 'card';
+                card.innerHTML = `
+                    <div class="card-name">${s.name}</div>
+                    <div class="qr-container"><div id="qr${i}"></div></div>
+                    <div class="details">
+                        <div class="detail-row">
+                            <span class="detail-label">Account:</span>
+                            <span class="detail-value">${s.otp.account || 'N/A'}</span>
+                        </div>
+                        <div class="detail-row">
+                            <span class="detail-label">Secret:</span>
+                            <span class="detail-value">${s.secret}</span>
+                        </div>
+                    </div>
+                `;
+                grid.appendChild(card);
+
+                let url;
+                if (!s.otp.link) {
+                    const u = new URL(`otpauth://totp/${encodeURIComponent(s.name)}:${encodeURIComponent(s.otp.account)}`);
+                    u.searchParams.set('algorithm', s.otp.algorithm);
+                    u.searchParams.set('digits', s.otp.digits);
+                    u.searchParams.set('issuer', s.name);
+                    u.searchParams.set('period', s.otp.period);
+                    u.searchParams.set('secret', s.secret);
+                    url = u.toString();
+                } else {
+                    url = s.otp.link.replace('[hidden]', s.secret);
+                }
+
+                new QRCode($(`qr${i}`), {
+                    text: url,
+                    width: 200,
+                    height: 200,
+                    colorDark: "#000",
+                    colorLight: "#fff",
+                    correctLevel: QRCode.CorrectLevel.H
+                });
+            });
+
+            showMsg(`✓ Loaded ${services.length} accounts`, 'success');
+        }
+
+        async function handleFile(file) {
+            showMsg('Processing...', 'info');
+            
+            const reader = new FileReader();
+            reader.onload = async e => {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    
+                    if (data.servicesEncrypted) {
+                        currentData = data.servicesEncrypted;
+                        showModal();
+                    } else if (data.services && data.services.length > 0) {
+                        display(data.services);
+                    } else {
+                        showMsg('No services found', 'error');
+                    }
+                } catch (err) {
+                    showMsg('Invalid .2fas file', 'error');
+                }
+            };
+            
+            reader.readAsText(file);
+        }
+    </script>
+</body>
+</html>
